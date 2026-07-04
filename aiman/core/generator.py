@@ -6,23 +6,45 @@ from __future__ import annotations
 from aiman.llm.client import LLMClient
 from aiman.core.safety import assess_command
 
+import os
 import platform
-try:
-    _os_info = platform.freedesktop_os_release().get("PRETTY_NAME", platform.system())
-except Exception:
-    _os_info = platform.system() + " " + platform.release()
+import re
 
-_SYSTEM_PROMPT = (
-    f"You translate plain-English requests into a single Linux shell command "
-    f"(or a short pipeline). The user is running on: {_os_info}. "
-    "Respond with:\n"
-    "1. The command, on its own line, in a code block.\n"
-    "2. One short line explaining what it does.\n"
-    "Prefer the safest command that satisfies the request literally — do not "
-    "add destructive flags (e.g. -f, --force, -rf) unless the user explicitly "
-    "asked for them. If the request is ambiguous, pick the most common safe "
-    "interpretation and say so in one line."
-)
+def _get_os_info() -> str:
+    try:
+        return platform.freedesktop_os_release().get("PRETTY_NAME", platform.system())
+    except Exception:
+        return platform.system() + " " + platform.release()
+
+def _get_context_info() -> str:
+    cwd = os.getcwd()
+    try:
+        files = os.listdir(cwd)
+        # Limit to 30 files to avoid massive prompts
+        files = files[:30]
+        files_str = ", ".join(files)
+        if not files_str:
+            files_str = "(empty directory)"
+    except Exception:
+        files_str = "(unable to read directory)"
+    return f"The user is in directory: {cwd}. The files present are: {files_str}."
+
+def _get_system_prompt() -> str:
+    os_info = _get_os_info()
+    ctx_info = _get_context_info()
+    return (
+        f"You translate plain-English requests into a single Linux shell command "
+        f"(or a short pipeline). The user is running on: {os_info}. "
+        f"{ctx_info} "
+        "CRITICAL RULE: If the user's request is NOT about executing a shell command or navigating the filesystem (e.g., asking for recipes, general knowledge, or writing scripts), you MUST output ONLY: `ERROR: Not a Linux command request.` Do not generate a command.\n"
+        "Respond with:\n"
+        "1. The command, on its own line, in a code block.\n"
+        "2. One short line explaining what it does.\n"
+        "Prefer the safest command that satisfies the request literally — do not "
+        "add destructive flags (e.g. -f, --force, -rf) unless the user explicitly "
+        "asked for them. If the request is ambiguous, pick the most common safe "
+        "interpretation and say so in one line."
+    )
 
 
 def generate_command(description: str, llm: LLMClient) -> dict:
@@ -36,7 +58,7 @@ def generate_command(description: str, llm: LLMClient) -> dict:
     if not description or not description.strip():
         raise ValueError("description must be a non-empty string")
 
-    raw_response = llm.complete(system=_SYSTEM_PROMPT, user=description.strip())
+    raw_response = llm.complete(system=_get_system_prompt(), user=description.strip())
     generated_command = _extract_code_block(raw_response)
     safety = assess_command(generated_command, llm) if generated_command else None
 
@@ -48,20 +70,19 @@ def generate_command(description: str, llm: LLMClient) -> dict:
 
 
 def _extract_code_block(text: str) -> str | None:
-    if "```" not in text:
-        # No code fence — fall back to the first non-empty line.
-        for line in text.splitlines():
-            if line.strip():
-                return line.strip()
-        return None
-    parts = text.split("```")
-    if len(parts) < 2:
-        return None
-    block = parts[1]
-    lines = [ln for ln in block.splitlines() if ln.strip()]
-    if not lines:
-        return None
-    # Strip a language hint like "bash" if it's the whole first line.
-    if lines[0].strip().isalpha() and len(lines) > 1:
-        lines = lines[1:]
-    return "\n".join(lines).strip() if lines else None
+    # 1. Try standard markdown code blocks
+    match = re.search(r"```(?:bash|sh|shell)?\s*\n(.*?)(?:```|$)", text, flags=re.DOTALL | re.IGNORECASE)
+    if match:
+        return match.group(1).strip()
+        
+    # 2. Try inline backticks if it's a one-liner
+    match = re.search(r"`([^`\n]+)`", text)
+    if match:
+        return match.group(1).strip()
+        
+    # 3. Fallback: take the first non-empty line as the command
+    lines = [line.strip() for line in text.split("\n") if line.strip()]
+    if lines and not lines[0].startswith("ERROR"):
+        return lines[0]
+        
+    return None

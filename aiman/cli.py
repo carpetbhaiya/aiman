@@ -4,17 +4,18 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.markdown import Markdown
-from rich.prompt import Confirm
+from rich.prompt import Confirm, Prompt
 from rich.spinner import SPINNERS
+from rich.live import Live
 import subprocess
 import random
 
 from aiman.detect import detect_mode
 from aiman.llm.client import get_default_client
-from aiman.core.explainer import explain_command
+from aiman.core.explainer import explain_command, explain_command_stream
 from aiman.core.generator import generate_command
 from aiman.core.safety import assess_command
-from aiman.config import load_config, save_config
+from aiman.config import load_config, save_config, append_history, get_history
 
 app = typer.Typer(add_completion=False, help="AI man page, command generator, and safety checker.")
 console = Console()
@@ -77,11 +78,13 @@ def explain(command: str = typer.Argument(..., help="Command or utility name, e.
         raise typer.Exit()
         
     llm = get_default_client()
-    with console.status(f"[bold cyan]Asking AI to explain '{command}'...[/bold cyan]", spinner=random.choice(RANDOM_SPINNERS)):
-        result = explain_command(command, llm)
     
-    md = Markdown(result)
-    console.print(Panel(md, title=f"📘 aiman explain: {command}", border_style="cyan"))
+    console.print(f"[bold cyan]Asking AI to explain '{command}'...[/bold cyan]")
+    text = ""
+    with Live(Panel(Markdown(text), title=f"📘 aiman explain: {command}", border_style="cyan"), refresh_per_second=10) as live:
+        for chunk in explain_command_stream(command, llm):
+            text += chunk
+            live.update(Panel(Markdown(text), title=f"📘 aiman explain: {command}", border_style="cyan"))
 
 def _print_self_capabilities():
     content = """
@@ -108,19 +111,58 @@ def _print_self_capabilities():
 def gen(description: str = typer.Argument(..., help="What you want to do, in plain English")):
     """Generate a shell command from a plain-English description."""
     llm = get_default_client()
-    with console.status("[bold green]Generating command...[/bold green]", spinner=random.choice(RANDOM_SPINNERS)):
-        result = generate_command(description, llm)
-        
-    md = Markdown(result["raw_response"])
-    console.print(Panel(md, title="✨ aiman gen", border_style="green"))
-    _print_safety(result["safety"])
     
-    cmd = result.get("extracted_command")
-    safety = result.get("safety")
-    if cmd and safety and safety.verdict == "safe":
-        if Confirm.ask("\n[bold cyan]Would you like to execute this command?[/bold cyan]", default=False):
+    current_desc = description
+    original_desc = description
+    
+    while True:
+        with console.status("[bold green]Generating command...[/bold green]", spinner=random.choice(RANDOM_SPINNERS)):
+            result = generate_command(current_desc, llm)
+            
+        if "ERROR: Not a Linux command" in result["raw_response"]:
+            console.print("[bold red]❌ Request Rejected:[/bold red] I can only help with generating Linux shell commands!")
+            raise typer.Exit(1)
+            
+        md = Markdown(result["raw_response"])
+        console.print(Panel(md, title="✨ aiman gen", border_style="green"))
+        
+        if result["safety"] is not None:
+            _print_safety(result["safety"])
+        else:
+            console.print("[bold yellow]No valid shell command could be extracted from the AI's response.[/bold yellow]")
+        
+        cmd = result.get("extracted_command")
+        safety = result.get("safety")
+        
+        if not cmd or not safety:
+            break
+            
+        # Determine choices based on safety
+        choices = ["e", "r", "c"] if safety.verdict == "safe" else ["r", "c"]
+        choice_str = "[e]xecute, [r]efine, [c]ancel" if safety.verdict == "safe" else "[r]efine, [c]ancel (Command is NOT safe)"
+        
+        if safety.verdict == "safe":
+            append_history(original_desc, cmd)
+            
+        choice = Prompt.ask(f"\n[bold cyan]{choice_str}[/bold cyan]", choices=choices, default="c", show_choices=False)
+        
+        if choice == "e":
             console.print(f"[dim]Executing: {cmd}[/dim]\n")
             subprocess.run(cmd, shell=True)
+            break
+        elif choice == "r":
+            refinement = Prompt.ask("[bold yellow]How should I change it?[/bold yellow]")
+            current_desc = (
+                f"Original request: {original_desc}\n"
+                f"Previous command generated: `{cmd}`\n"
+                f"User's requested change: {refinement}\n"
+                f"Generate a new command based on this change."
+            )
+            console.print() # Add newline before next generation
+            continue
+        else:
+            console.print("[dim]Cancelled.[/dim]")
+            break
 
 
 @app.command()
@@ -130,6 +172,50 @@ def check(command: str = typer.Argument(..., help="A shell command to safety-che
     with console.status(f"[bold yellow]Analyzing command safety...[/bold yellow]", spinner=random.choice(RANDOM_SPINNERS)):
         result = assess_command(command, llm)
     _print_safety(result)
+
+@app.command()
+def history():
+    """View recently generated safe commands."""
+    from rich.table import Table
+    hist = get_history()
+    if not hist:
+        console.print("[yellow]No command history found.[/yellow]")
+        return
+        
+    table = Table(title="Recent Commands", border_style="blue")
+    table.add_column("#", justify="right", style="cyan", no_wrap=True)
+    table.add_column("Description", style="magenta")
+    table.add_column("Command", style="green")
+    
+    # Show last 10
+    recent = hist[-10:]
+    for idx, item in enumerate(recent, 1):
+        table.add_row(str(idx), item["description"], item["command"])
+        
+    console.print(table)
+
+@app.command()
+def save(alias: str = typer.Argument(..., help="Name of the alias")):
+    """Save the last generated safe command as a bash alias."""
+    import os
+    
+    hist = get_history()
+    if not hist:
+        console.print("[bold red]Error:[/bold red] No history to save.")
+        raise typer.Exit(1)
+        
+    last_cmd = hist[-1]["command"]
+    bashrc_path = os.path.expanduser("~/.bashrc")
+    
+    alias_line = f"\nalias {alias}='{last_cmd}'\n"
+    
+    try:
+        with open(bashrc_path, "a") as f:
+            f.write(alias_line)
+        console.print(f"[bold green]Success:[/bold green] Saved alias '{alias}' -> '{last_cmd}' in ~/.bashrc")
+        console.print("[dim]Run 'source ~/.bashrc' or restart your terminal to use it.[/dim]")
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] Could not write to ~/.bashrc: {e}")
 
 
 @app.callback(invoke_without_command=True)
@@ -166,7 +252,7 @@ def run_app():
     from aiman.detect import detect_mode
     
     # Typer parsing workaround: if there's an argument but no valid subcommand, route it properly.
-    if len(sys.argv) > 1 and sys.argv[1] not in ["explain", "gen", "check", "config", "--help", "-h"]:
+    if len(sys.argv) > 1 and sys.argv[1] not in ["explain", "gen", "check", "config", "history", "save", "--help", "-h"]:
         # The user provided free-form text without a subcommand.
         text = " ".join(sys.argv[1:])
         mode = detect_mode(text)

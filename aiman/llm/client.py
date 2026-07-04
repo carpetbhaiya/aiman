@@ -10,6 +10,7 @@ means:
 from __future__ import annotations
 
 import os
+import typing
 from typing import Protocol
 
 from aiman.config import load_config
@@ -41,11 +42,25 @@ class OllamaLLMClient:
             model=self.model,
             messages=[
                 {"role": "system", "content": system},
-                {"role": "user", "content": user}
+                {"role": "user", "content": user},
             ],
-            options={"num_predict": 1024}
+            options={"num_predict": 1024},
         )
-        return response['message']['content']
+        return response["message"]["content"]
+
+    def stream(self, system: str, user: str) -> typing.Iterator[str]:
+        response = self._client.chat(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            options={"num_predict": 1024},
+            stream=True
+        )
+        for chunk in response:
+            if "message" in chunk and "content" in chunk["message"]:
+                yield chunk["message"]["content"]
 
 
 def get_default_client() -> LLMClient:
