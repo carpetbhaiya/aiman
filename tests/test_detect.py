@@ -12,8 +12,8 @@ def test_english_sentence_is_generate():
     assert detect_mode("list all pdfs modified today") == "generate"
 
 
-def test_full_command_with_real_binary_is_check():
-    assert detect_mode("rm -rf /") == "check"
+def test_full_command_with_real_binary_is_explain():
+    assert detect_mode("rm -rf /") == "explain"
 
 
 def test_full_command_with_unknown_first_token_is_generate():
