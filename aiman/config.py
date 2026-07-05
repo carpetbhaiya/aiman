@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -45,7 +46,11 @@ def get_history() -> list[dict[str, Any]]:
 
 def append_history(description: str, command: str) -> None:
     history = get_history()
-    history.append({"description": description, "command": command})
+    history.append({
+        "description": description,
+        "command": command,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
     # Keep only last 50
     if len(history) > 50:
         history = history[-50:]
