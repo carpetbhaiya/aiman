@@ -33,13 +33,9 @@ def detect_mode(raw_input: str) -> str:
     if len(tokens) == 1:
         return "explain" if is_known_binary(first) else "generate"
 
-    # For multiple tokens, check if the first token is a known binary.
-    # If it is, but the input lacks any shell-like characters (- / | > <), it might be plain English.
     if is_known_binary(first):
-        shell_chars = set("-/|><")
-        if any(c in text for c in shell_chars):
-            return "check"
-        else:
-            return "generate"
+        return "explain"
+
+    return "generate"
 
     return "generate"
