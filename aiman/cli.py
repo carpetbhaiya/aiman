@@ -270,8 +270,11 @@ def run_app():
         # The user provided free-form text without a subcommand.
         text = " ".join(sys.argv[1:])
         
+        import os
+        is_ai_man = (os.path.basename(sys.argv[0]) == "ai" and text.strip().lower() == "man")
+        
         # Easter egg
-        if text.strip().lower() in ["ai man", "iron man"]:
+        if is_ai_man or text.strip().lower() in ["ai man", "iron man"]:
             console.print("[bold yellow]🤖 Did you mean 'aiman'? I am not Iron Man, I am aiman! But here is what I can do...[/bold yellow]\n")
             text = "aiman"
             

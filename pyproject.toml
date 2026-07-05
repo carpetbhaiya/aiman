@@ -19,6 +19,7 @@ dev = [
 
 [project.scripts]
 aiman = "aiman.cli:run_app"
+ai = "aiman.cli:run_app"
 
 [build-system]
 requires = ["setuptools>=68"]
