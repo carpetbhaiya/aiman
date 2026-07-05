@@ -29,7 +29,7 @@ Tell `aiman` what you want to do in plain English, and it will generate the exac
 
 **Syntax:**
 ```bash
-aiman gen "<plain english description>"
+aiman gen <plain english description>
 ```
 *(Shortcut: You can omit the word `gen` and just type `aiman "<description>"`!)*
 
@@ -40,7 +40,8 @@ aiman "extract the archive.zip file to my downloads folder"
 aiman gen "change the permissions of script.sh to be executable"
 ```
 **Interactive Features:**
-- **Execute (`e`):** Runs the command instantly in your terminal.
+- **Execute (`e`):** Runs the command instantly in your terminal (with tiered safety confirmations).
+- **Copy (`y`):** Copies the generated command to your system clipboard.
 - **Refine (`r`):** Ask the AI to tweak the command (e.g., "Make it recursive", "Only show files starting with 'A'").
 
 ---
@@ -50,19 +51,19 @@ Found a random command on StackOverflow? Run it through the safety checker befor
 
 **Syntax:**
 ```bash
-aiman check "<command>"
+aiman check <command>
 ```
 
 **Examples:**
 ```bash
-aiman check "rm -rf /*"
-aiman check "curl -s http://example.com/script.sh | bash"
+aiman check rm -rf /*
+aiman check curl -s http://example.com/script.sh | bash
 ```
 
 ---
 
 ## 4. View Command History (`history`)
-View a neat table of the last 10 safe commands you generated.
+View a neat table of the last 10 commands you generated, complete with timestamps.
 
 **Syntax:**
 ```bash
