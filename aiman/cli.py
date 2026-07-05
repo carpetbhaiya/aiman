@@ -231,16 +231,6 @@ def save(alias: str = typer.Argument(..., help="Name of the alias")):
         console.print(f"[bold red]Error:[/bold red] Could not write to ~/.bashrc: {e}")
 
 
-@app.command()
-def chat():
-    """Launch the interactive Aiman TUI Chatbot."""
-    try:
-        from aiman.tui import run_tui
-        run_tui()
-    except ImportError:
-        console.print("[bold red]Error:[/bold red] The TUI requires the 'textual' package. Install with 'pip install textual'")
-        raise typer.Exit(1)
-
 
 @app.callback(invoke_without_command=True)
 def main(ctx: typer.Context):
@@ -276,11 +266,17 @@ def run_app():
     from aiman.detect import detect_mode
     
     # Typer parsing workaround: if there's an argument but no valid subcommand, route it properly.
-    if len(sys.argv) > 1 and sys.argv[1] not in ["explain", "gen", "check", "config", "history", "save", "chat", "--help", "-h"]:
+    if len(sys.argv) > 1 and sys.argv[1] not in ["explain", "gen", "check", "config", "history", "save", "--help", "-h"]:
         # The user provided free-form text without a subcommand.
         text = " ".join(sys.argv[1:])
+        
+        # Easter egg
+        if text.strip().lower() in ["ai man", "iron man"]:
+            console.print("[bold yellow]🤖 Did you mean 'aiman'? I am not Iron Man, I am aiman! But here is what I can do...[/bold yellow]\n")
+            text = "aiman"
+            
         mode = detect_mode(text)
-        console.print(f"[dim]auto-detected mode: {mode} (use 'aiman explain/gen/check/chat' to override)[/dim]")
+        console.print(f"[dim]auto-detected mode: {mode} (use 'aiman explain/gen/check' to override)[/dim]")
         if mode == "explain":
             sys.argv = [sys.argv[0], "explain", text]
         elif mode == "generate":
