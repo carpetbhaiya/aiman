@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import typing
 from aiman.llm.client import LLMClient
+from aiman.core.command_cache import COMMAND_CACHE
 
 _SYSTEM_PROMPT = (
     "You are a terse, accurate Linux command-line reference.\n"
@@ -18,9 +19,20 @@ _SYSTEM_PROMPT = (
 def explain_command(command_name: str, llm: LLMClient) -> str:
     if not command_name or not command_name.strip():
         raise ValueError("command_name must be a non-empty string")
+        
+    cmd = command_name.strip().lower()
+    if cmd in COMMAND_CACHE:
+        return COMMAND_CACHE[cmd]
+        
     return llm.complete(system=_SYSTEM_PROMPT, user=command_name.strip())
 
 def explain_command_stream(command_name: str, llm: LLMClient) -> typing.Iterator[str]:
     if not command_name or not command_name.strip():
         raise ValueError("command_name must be a non-empty string")
+        
+    cmd = command_name.strip().lower()
+    if cmd in COMMAND_CACHE:
+        yield COMMAND_CACHE[cmd]
+        return
+        
     yield from llm.stream(system=_SYSTEM_PROMPT, user=command_name.strip())

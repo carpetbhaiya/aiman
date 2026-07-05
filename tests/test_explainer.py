@@ -1,19 +1,42 @@
 import pytest
 
-from aiman.core.explainer import explain_command
+from aiman.core.explainer import explain_command, explain_command_stream
 
 
-def test_explain_passes_command_to_llm_and_returns_response(fake_llm):
-    fake_llm._responses.append("tar: archive utility.\nSyntax: tar [options] files\nExample: tar -czf a.tar.gz dir/")
-    result = explain_command("tar", fake_llm)
-    assert "tar" in result.lower()
-    assert fake_llm.calls[0]["user"] == "tar"
+def test_explain_passes_command_to_llm_if_not_in_cache(fake_llm):
+    # 'htop' is not in the cache, so it should hit the LLM
+    fake_llm._responses.append("htop: interactive process viewer")
+    result = explain_command("htop", fake_llm)
+    assert "htop" in result.lower()
+    assert len(fake_llm.calls) == 1
+    assert fake_llm.calls[0]["user"] == "htop"
 
 
-def test_explain_strips_whitespace_from_input(fake_llm):
+def test_explain_strips_whitespace_from_input_for_llm(fake_llm):
+    # 'awk' is not in the cache
     fake_llm._responses.append("ok")
-    explain_command("  grep  ", fake_llm)
-    assert fake_llm.calls[0]["user"] == "grep"
+    explain_command("  awk  ", fake_llm)
+    assert len(fake_llm.calls) == 1
+    assert fake_llm.calls[0]["user"] == "awk"
+
+
+def test_explain_uses_cache_if_present(fake_llm):
+    # 'ls' is in the cache
+    result = explain_command("ls", fake_llm)
+    assert "**`ls`**: Lists directory contents" in result
+    # The LLM should NOT have been called
+    assert len(fake_llm.calls) == 0
+
+
+def test_explain_stream_uses_cache_if_present(fake_llm):
+    # 'tar' is in the cache
+    stream = explain_command_stream("tar", fake_llm)
+    chunks = list(stream)
+    
+    assert len(chunks) == 1
+    assert "**`tar`**: Tape archiver utility" in chunks[0]
+    # The LLM should NOT have been called
+    assert len(fake_llm.calls) == 0
 
 
 def test_explain_rejects_empty_input(fake_llm):
