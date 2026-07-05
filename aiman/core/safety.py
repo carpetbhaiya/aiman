@@ -35,7 +35,12 @@ _LLM_SYSTEM_PROMPT = (
     "if it is 'safe', 'caution' (works but has real footguns — e.g. force "
     "pushes, wide permission changes, irreversible deletes of user-named "
     "paths), or 'dangerous' (likely to cause serious, hard-to-reverse harm "
-    "to the system or data). Respond ONLY as JSON: "
+    "to the system or data).\n\n"
+    "CRITICAL GUIDELINES:\n"
+    "- Read-only commands (e.g., ls, cat, echo, pwd, grep, find) are ALWAYS 'safe'. Do not flag them as caution just because they might reveal information.\n"
+    "- Standard package installations (e.g., apt install, pip install) are 'safe' unless installing a known malicious package.\n"
+    "- Only use 'caution' if there is a real risk of accidental data loss or breaking the system if the user makes a typo.\n\n"
+    "Respond ONLY as JSON: "
     '{"verdict": "safe|caution|dangerous", "reasons": ["short reason", ...]}. '
     "No prose outside the JSON."
 )

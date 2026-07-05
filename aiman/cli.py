@@ -152,7 +152,7 @@ def gen(description: str = typer.Argument(..., help="What you want to do, in pla
             
         # Determine choices based on safety
         choices = ["e", "r", "c"] if safety.verdict == "safe" else ["r", "c"]
-        choice_str = "[e]xecute, [r]efine, [c]ancel" if safety.verdict == "safe" else "[r]efine, [c]ancel (Command is NOT safe)"
+        choice_str = "e (execute), r (refine), c (cancel)" if safety.verdict == "safe" else "r (refine), c (cancel) [Command is NOT safe]"
         
         if safety.verdict == "safe":
             append_history(original_desc, cmd)
