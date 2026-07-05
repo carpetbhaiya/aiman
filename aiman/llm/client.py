@@ -29,7 +29,7 @@ class OllamaLLMClient:
         cfg = load_config()
         self.model = model or cfg.get("model", "qwen3:14b")
         # Use config host or fallback to default
-        self._host = host or cfg.get("host", "http://172.18.224.1:11434")
+        self._host = host or cfg.get("host", "http://localhost:11434")
 
         # Imported lazily so importing this module (and testing everything
         # around it) never requires the ollama package to be configured.

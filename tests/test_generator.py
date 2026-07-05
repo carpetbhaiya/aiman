@@ -36,8 +36,17 @@ def test_generate_rejects_empty_input(fake_llm):
 @pytest.mark.parametrize("text,expected", [
     ("```\nls -la\n```", "ls -la"),
     ("```bash\ngrep -r foo .\n```", "grep -r foo ."),
-    ("no fences here\njust text", "no fences here"),
+    # Scenario 1: No language tag, just backticks (tar)
+    ("```\ntar -czvf backup.tar.gz /etc\n```\nBacks up the /etc directory.", "tar -czvf backup.tar.gz /etc"),
+    # Scenario 2: Single inline backticks (chmod)
+    ("`chmod +x script.sh`\nMakes the script executable.", "chmod +x script.sh"),
+    # Scenario 3: No backticks at all (ffmpeg)
+    ("ffmpeg -i input.mp4 output.avi\nConverts the mp4 video to avi format.", "ffmpeg -i input.mp4 output.avi"),
+    # Scenario 4: No backticks, empty lines before command (curl)
+    ("\n\ncurl -O https://example.com/file.zip\n\nDownloads the file.", "curl -O https://example.com/file.zip"),
+    # Empty cases
     ("```\n\n```", None),
+    ("", None),
 ])
 def test_extract_code_block_variants(text, expected):
     assert _extract_code_block(text) == expected

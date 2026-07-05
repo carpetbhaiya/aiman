@@ -72,16 +72,16 @@ def generate_command(description: str, llm: LLMClient) -> dict:
 def _extract_code_block(text: str) -> str | None:
     # 1. Try standard markdown code blocks
     match = re.search(r"```(?:bash|sh|shell)?\s*\n(.*?)(?:```|$)", text, flags=re.DOTALL | re.IGNORECASE)
-    if match:
+    if match and match.group(1).strip():
         return match.group(1).strip()
         
     # 2. Try inline backticks if it's a one-liner
     match = re.search(r"`([^`\n]+)`", text)
-    if match:
+    if match and match.group(1).strip():
         return match.group(1).strip()
         
     # 3. Fallback: take the first non-empty line as the command
-    lines = [line.strip() for line in text.split("\n") if line.strip()]
+    lines = [line.strip() for line in text.split("\n") if line.strip() and not set(line.strip()) == {"`"}]
     if lines and not lines[0].startswith("ERROR"):
         return lines[0]
         

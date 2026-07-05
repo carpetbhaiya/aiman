@@ -7,7 +7,7 @@ CONFIG_FILE = CONFIG_DIR / "config.json"
 
 DEFAULT_CONFIG = {
     "model": "qwen3:14b",
-    "host": "http://172.18.224.1:11434"
+    "host": "http://localhost:11434"
 }
 
 def load_config() -> dict[str, Any]:
