@@ -4,8 +4,17 @@ Goal 1: `aiman <command>` -> correct syntax + usage examples.
 from __future__ import annotations
 
 import typing
+import json
+import os
 from aiman.llm.client import LLMClient
-from aiman.core.command_cache import COMMAND_CACHE
+
+# Load the comprehensive JSON cache
+_CACHE_PATH = os.path.join(os.path.dirname(__file__), "command_cache.json")
+try:
+    with open(_CACHE_PATH, "r") as f:
+        COMMAND_CACHE = json.load(f)
+except FileNotFoundError:
+    COMMAND_CACHE = {}
 
 _SYSTEM_PROMPT = (
     "You are a terse, accurate Linux command-line reference.\n"
