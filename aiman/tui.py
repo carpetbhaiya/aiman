@@ -33,7 +33,7 @@ class AimanTUI(App):
     """
 
     BINDINGS = [
-        Binding("ctrl+e", "execute_command", "Execute Safe Command", show=True),
+        Binding("ctrl+x", "execute_command", "Execute Safe Command", show=True),
         Binding("ctrl+q", "quit", "Quit", show=True),
     ]
 
@@ -73,7 +73,7 @@ class AimanTUI(App):
         
         if safety:
             if safety.verdict == "safe":
-                self.chat_history += f"\n> ✅ **SAFE**: {safety.reasons[0] if safety.reasons else 'No reasons.'}\n> Press `Ctrl+E` to execute this command.\n"
+                self.chat_history += f"\n> ✅ **SAFE**: {safety.reasons[0] if safety.reasons else 'No reasons.'}\n> Press `Ctrl+X` to execute this command.\n"
                 self.last_generated_command = cmd
             else:
                 self.chat_history += f"\n> 🚨 **DANGEROUS**: {safety.reasons[0] if safety.reasons else 'Unsafe.'}\n> Execution disabled.\n"
