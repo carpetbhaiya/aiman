@@ -17,7 +17,11 @@ from aiman.core.generator import generate_command
 from aiman.core.safety import assess_command
 from aiman.config import load_config, save_config, append_history, get_history
 
-app = typer.Typer(add_completion=False, help="AI man page, command generator, and safety checker.")
+app = typer.Typer(
+    add_completion=False, 
+    rich_markup_mode="rich",
+    help="✨ [bold cyan]AI man page, command generator, and safety checker.[/bold cyan]"
+)
 console = Console()
 
 SPINNERS["pacman"] = {
@@ -87,6 +91,15 @@ def explain(command: str = typer.Argument(..., help="Command or utility name, e.
             live.update(Panel(Markdown(text), title=f"📘 aiman explain: {command}", border_style="cyan"))
 
 def _print_self_capabilities():
+    import pyfiglet
+    from rich.text import Text
+    from rich.align import Align
+    
+    ascii_art = pyfiglet.figlet_format("AIMAN", font="slant")
+    # A beautiful gradient-like feel using rich styles
+    banner = Text(ascii_art, style="bold bright_cyan")
+    console.print(Align.center(banner))
+    
     content = """
 # 🚀 aiman: Your AI-Powered Terminal Assistant
 
