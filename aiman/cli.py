@@ -158,19 +158,42 @@ def gen(description: list[str] = typer.Argument(..., help="What you want to do, 
         
         if not cmd or not safety:
             break
-            
-        # Determine choices based on safety
-        choices = ["e", "r", "c"] if safety.verdict == "safe" else ["r", "c"]
-        choice_str = "e (execute), r (refine), c (cancel)" if safety.verdict == "safe" else "r (refine), c (cancel) [Command is NOT safe]"
         
-        if safety.verdict == "safe":
-            append_history(original_desc, cmd)
+        # Always save to history
+        append_history(original_desc, cmd)
             
-        choice = Prompt.ask(f"\n[bold cyan]{choice_str}[/bold cyan]", choices=choices, default="c", show_choices=False)
+        # All commands get the same options — guardrails inform, not block
+        choice_str = "e (execute), y (copy), r (refine), c (cancel)"
+        choice = Prompt.ask(f"\n[bold cyan]{choice_str}[/bold cyan]", choices=["e", "y", "r", "c"], default="c", show_choices=False)
         
         if choice == "e":
-            console.print(f"[dim]Executing: {cmd}[/dim]\n")
-            subprocess.run(cmd, shell=True)
+            should_run = True
+            if safety.verdict == "caution":
+                should_run = Confirm.ask(
+                    "[bold yellow]⚠️  This command was flagged as CAUTION. Run anyway?[/bold yellow]",
+                    default=False
+                )
+            elif safety.verdict == "dangerous":
+                first = Confirm.ask(
+                    "[bold red]🚨 This command was flagged as DANGEROUS. Are you sure?[/bold red]",
+                    default=False
+                )
+                if first:
+                    should_run = Confirm.ask(
+                        "[bold red]⚠️  Final warning — this could cause irreversible damage. Proceed?[/bold red]",
+                        default=False
+                    )
+                else:
+                    should_run = False
+            
+            if should_run:
+                console.print(f"[dim]Executing: {cmd}[/dim]\n")
+                subprocess.run(cmd, shell=True)
+            else:
+                console.print("[dim]Execution cancelled.[/dim]")
+            break
+        elif choice == "y":
+            _copy_to_clipboard(cmd)
             break
         elif choice == "r":
             refinement = Prompt.ask("[bold yellow]How should I change it?[/bold yellow]")
@@ -281,6 +304,37 @@ def _print_safety(result) -> None:
         title=f"🛡️  aiman check (source: {result.source})",
         border_style=style.replace("bold ", "")
     ))
+
+
+def _copy_to_clipboard(cmd: str) -> None:
+    """Copy a command to the system clipboard, with fallbacks."""
+    import shutil as _shutil
+    
+    copied = False
+    # Try common clipboard tools in order of preference
+    for tool, args in [
+        ("xclip", ["xclip", "-selection", "clipboard"]),
+        ("xsel", ["xsel", "--clipboard", "--input"]),
+        ("wl-copy", ["wl-copy"]),
+    ]:
+        if _shutil.which(tool):
+            try:
+                proc = subprocess.run(args, input=cmd, text=True, capture_output=True, timeout=5)
+                if proc.returncode == 0:
+                    console.print(f"[bold green]📋 Copied to clipboard![/bold green] [dim]{cmd}[/dim]")
+                    copied = True
+                    break
+            except Exception:
+                continue
+    
+    if not copied:
+        # Fallback: print the command clearly so user can select & copy manually
+        console.print(Panel(
+            f"[bold]{cmd}[/bold]",
+            title="📋 Copy this command",
+            border_style="cyan",
+            subtitle="[dim]Install xclip or xsel for auto-copy[/dim]"
+        ))
 
 
 def run_app():
