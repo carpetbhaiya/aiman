@@ -49,6 +49,11 @@ tests/
 pip install -e ".[dev]"
 # If Ollama is running on Windows and you are in WSL, set:
 # export OLLAMA_URL="http://<windows_ip>:11434"
+
+# Generate local offline command caches and TF-IDF search index
+python scripts/build_cache.py
+python scripts/build_index.py
+
 aiman tar
 ```
 
@@ -67,9 +72,9 @@ pytest -v
   something. The LLM is only consulted for commands that pass the static
   filter, to catch subtler cases (e.g. `git push --force`, obscure `find
   -exec rm` combos) and to explain *why* something is risky in plain English.
-- **The LLM wrapper never runs anything.** `aiman` only ever prints commands;
-  it does not execute them for you. That's a deliberate scope boundary —
-  auto-executing AI-generated shell commands is how you lose a filesystem.
+- **Guardrails inform, they don't block.** The LLM wrapper never auto-executes commands.
+  All generated commands present an option to execute, copy to clipboard, or refine.
+  If a command is flagged as caution or dangerous, it requires tiered explicit user confirmation before running.
 - **Auto-detect is intentionally simple.** A "smart" classifier that tries
   to read intent from arbitrary text is a bigger, flakier system than the
   actual product. Simple token heuristic + explicit subcommand override

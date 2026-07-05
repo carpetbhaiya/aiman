@@ -1,5 +1,5 @@
 import pytest
-
+import typing
 
 class FakeLLMClient:
     """
@@ -16,6 +16,11 @@ class FakeLLMClient:
         if not self._responses:
             raise AssertionError("FakeLLMClient ran out of queued responses")
         return self._responses.pop(0)
+
+    def stream(self, system: str, user: str) -> typing.Iterator[str]:
+        response = self.complete(system, user)
+        yield response
+
 
 
 @pytest.fixture

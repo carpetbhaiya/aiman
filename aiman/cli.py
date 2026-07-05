@@ -23,28 +23,8 @@ app = typer.Typer(
     rich_markup_mode="rich",
     help="✨ [bold cyan]AI man page, command generator, and safety checker.[/bold cyan]"
 )
-console = Console()
+from aiman.ui import console, SPINNERS, RANDOM_SPINNERS, print_self_capabilities, print_safety, copy_to_clipboard
 
-SPINNERS["pacman"] = {
-    "interval": 150,
-    "frames": [
-        "ᗧ • • •",
-        " ᗧ • • ",
-        "  ᗧ •  ",
-        "   ᗧ   ",
-        "   ᗤ   ",
-        "  ᗤ •  ",
-        " ᗤ • • ",
-        "ᗤ • • •"
-    ]
-}
-
-RANDOM_SPINNERS = [
-    "dots", "bouncingBar", "point", "shark", "earth", 
-    "moon", "runner", "star", "clock", "pacman"
-]
-
-_VERDICT_STYLE = {"safe": "green", "caution": "yellow", "dangerous": "bold red"}
 
 config_app = typer.Typer(help="Manage aiman configuration (e.g., model, host).")
 app.add_typer(config_app, name="config")
@@ -83,50 +63,27 @@ def explain(
     """Show syntax and examples for a known command."""
     command_str = " ".join(command)
     if command_str.strip().lower() == "aiman":
-        _print_self_capabilities()
+        print_self_capabilities()
         raise typer.Exit()
         
     llm = get_default_client()
     
     console.print(f"[bold cyan]Asking AI to explain '{command_str}'...[/bold cyan]")
     text = ""
-    with Live(Panel(Markdown(text), title=f"📘 aiman explain: {command_str}", border_style="cyan"), refresh_per_second=10) as live:
-        for chunk in explain_command_stream(command_str, llm):
-            text += chunk
-            live.update(Panel(Markdown(text), title=f"📘 aiman explain: {command_str}", border_style="cyan"))
+    try:
+        with Live(Panel(Markdown(text), title=f"📘 aiman explain: {command_str}", border_style="cyan"), refresh_per_second=10) as live:
+            for chunk in explain_command_stream(command_str, llm):
+                text += chunk
+                live.update(Panel(Markdown(text), title=f"📘 aiman explain: {command_str}", border_style="cyan"))
 
-    safety = assess_command(command_str, llm)
-    if explicit or safety.verdict in ["caution", "dangerous"]:
-        _print_safety(safety)
+        safety = assess_command(command_str, llm)
+        if explicit or safety.verdict in ["caution", "dangerous"]:
+            print_safety(safety)
+    except Exception as e:
+        console.print(f"[bold red]❌ Error:[/bold red] Could not connect to the AI model ({e}).")
+        console.print("[dim]If you are using Ollama, ensure it is running (try: `ollama serve`).[/dim]")
+        raise typer.Exit(1)
 
-def _print_self_capabilities():
-    import pyfiglet
-    from rich.text import Text
-    from rich.align import Align
-    
-    ascii_art = pyfiglet.figlet_format("AIMAN", font="slant")
-    # A beautiful gradient-like feel using rich styles
-    banner = Text(ascii_art, style="bold bright_cyan")
-    console.print(Align.center(banner))
-    
-    content = """
-# 🚀 aiman: Your AI-Powered Terminal Assistant
-
-`aiman` is an intelligent CLI tool that replaces standard `man` pages, generates safe commands from plain English, and protects your system from dangerous mistakes.
-
-## 🛠️ Core Capabilities
-
-*   **Explain Commands:** Just type `aiman <command>` (e.g., `aiman tar`) to get a clear, human-readable explanation with practical examples.
-*   **Generate Commands:** Type `aiman "plain english"` (e.g., `aiman "extract this zip file"`) and it will generate the exact shell command you need.
-*   **🛡️ Safety Checker:** Every generated or pasted command is run through a strict safety checker. It catches dangerous operations (like `rm -rf /`) before you accidentally execute them.
-*   **⚡ Interactive Execution:** If a generated command is marked as `✅ SAFE`, `aiman` will ask if you want to run it instantly.
-*   **⚙️ Smart OS Detection:** It knows what OS you're running (e.g., Ubuntu) and automatically adapts its suggestions (like using `apt` instead of `pacman`).
-*   **Persistent Config:** Easily switch AI models or server hosts on the fly using `aiman config set model <name>`.
-
-*Built to make the terminal accessible, powerful, and safe.*
-"""
-    md = Markdown(content.strip())
-    console.print(Panel(md, title="✨ aiman capabilities", border_style="magenta"))
 
 
 @app.command()
@@ -138,8 +95,13 @@ def gen(description: list[str] = typer.Argument(..., help="What you want to do, 
     original_desc = current_desc
     
     while True:
-        with console.status("[bold green]Generating command...[/bold green]", spinner=random.choice(RANDOM_SPINNERS)):
-            result = generate_command(current_desc, llm)
+        try:
+            with console.status("[bold green]Generating command...[/bold green]", spinner=random.choice(RANDOM_SPINNERS)):
+                result = generate_command(current_desc, llm)
+        except Exception as e:
+            console.print(f"[bold red]❌ Error:[/bold red] Could not connect to the AI model ({e}).")
+            console.print("[dim]If you are using Ollama, ensure it is running (try: `ollama serve`).[/dim]")
+            raise typer.Exit(1)
             
         if "ERROR: Not a Linux command" in result["raw_response"]:
             console.print("[bold red]❌ Request Rejected:[/bold red] I can only help with generating Linux shell commands!")
@@ -149,7 +111,7 @@ def gen(description: list[str] = typer.Argument(..., help="What you want to do, 
         console.print(Panel(md, title="✨ aiman gen", border_style="green"))
         
         if result["safety"] is not None:
-            _print_safety(result["safety"])
+            print_safety(result["safety"])
         else:
             console.print("[bold yellow]No valid shell command could be extracted from the AI's response.[/bold yellow]")
         
@@ -193,7 +155,7 @@ def gen(description: list[str] = typer.Argument(..., help="What you want to do, 
                 console.print("[dim]Execution cancelled.[/dim]")
             break
         elif choice == "y":
-            _copy_to_clipboard(cmd)
+            copy_to_clipboard(cmd)
             break
         elif choice == "r":
             refinement = Prompt.ask("[bold yellow]How should I change it?[/bold yellow]")
@@ -218,9 +180,14 @@ def check(command: list[str] = typer.Argument(..., help="A shell command to safe
     """Check whether a pasted command is dangerous before you run it."""
     llm = get_default_client()
     command_str = " ".join(command)
-    with console.status(f"[bold yellow]Analyzing command safety...[/bold yellow]", spinner=random.choice(RANDOM_SPINNERS)):
-        result = assess_command(command_str, llm)
-    _print_safety(result)
+    try:
+        with console.status(f"[bold yellow]Analyzing command safety...[/bold yellow]", spinner=random.choice(RANDOM_SPINNERS)):
+            result = assess_command(command_str, llm)
+        print_safety(result)
+    except Exception as e:
+        console.print(f"[bold red]❌ Error:[/bold red] Could not connect to the AI model ({e}).")
+        console.print("[dim]If you are using Ollama, ensure it is running (try: `ollama serve`).[/dim]")
+        raise typer.Exit(1)
 
 @app.command()
 def history():
@@ -289,52 +256,6 @@ def main(ctx: typer.Context):
     raise typer.Exit()
 
 
-def _print_safety(result) -> None:
-    style_map = {
-        "safe": ("green", "✅ SAFE"),
-        "caution": ("yellow", "⚠️ CAUTION"),
-        "dangerous": ("bold red", "🚨 DANGEROUS")
-    }
-    style, title = style_map.get(result.verdict, ("white", result.verdict.upper()))
-    
-    reasons = "\n".join(f"• {r}" for r in result.reasons) or "No specific reasons returned."
-    
-    console.print(Panel(
-        f"[{style}]{title}[/{style}]\n\n{reasons}",
-        title=f"🛡️  aiman check (source: {result.source})",
-        border_style=style.replace("bold ", "")
-    ))
-
-
-def _copy_to_clipboard(cmd: str) -> None:
-    """Copy a command to the system clipboard, with fallbacks."""
-    import shutil as _shutil
-    
-    copied = False
-    # Try common clipboard tools in order of preference
-    for tool, args in [
-        ("xclip", ["xclip", "-selection", "clipboard"]),
-        ("xsel", ["xsel", "--clipboard", "--input"]),
-        ("wl-copy", ["wl-copy"]),
-    ]:
-        if _shutil.which(tool):
-            try:
-                proc = subprocess.run(args, input=cmd, text=True, capture_output=True, timeout=5)
-                if proc.returncode == 0:
-                    console.print(f"[bold green]📋 Copied to clipboard![/bold green] [dim]{cmd}[/dim]")
-                    copied = True
-                    break
-            except Exception:
-                continue
-    
-    if not copied:
-        # Fallback: print the command clearly so user can select & copy manually
-        console.print(Panel(
-            f"[bold]{cmd}[/bold]",
-            title="📋 Copy this command",
-            border_style="cyan",
-            subtitle="[dim]Install xclip or xsel for auto-copy[/dim]"
-        ))
 
 
 def run_app():
@@ -342,7 +263,9 @@ def run_app():
     from aiman.detect import detect_mode
     
     # Typer parsing workaround: if there's an argument but no valid subcommand, route it properly.
-    if len(sys.argv) > 1 and sys.argv[1] not in ["explain", "gen", "check", "config", "history", "save", "--help", "-h"]:
+    registered_cmds = [cmd.name for cmd in app.registered_commands] + ["--help", "-h"]
+    
+    if len(sys.argv) > 1 and sys.argv[1] not in registered_cmds:
         text = " ".join(sys.argv[1:])
         text_lower = text.strip().lower()
         

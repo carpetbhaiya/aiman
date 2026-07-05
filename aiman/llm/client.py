@@ -1,7 +1,7 @@
 """
 Single choke point for all LLM calls.
 
-Nothing else in the codebase should import `anthropic` directly. That
+Nothing else in the codebase should import `ollama` directly. That
 means:
 - Tests mock this one class instead of monkeypatching a SDK deep inside
   three other modules.
@@ -19,6 +19,10 @@ from aiman.config import load_config
 class LLMClient(Protocol):
     def complete(self, system: str, user: str) -> str:
         """Send a single-turn prompt, return the raw text response."""
+        ...
+
+    def stream(self, system: str, user: str) -> typing.Iterator[str]:
+        """Send a single-turn prompt, return an iterator of response chunks."""
         ...
 
 
