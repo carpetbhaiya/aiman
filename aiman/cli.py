@@ -267,16 +267,28 @@ def run_app():
     
     # Typer parsing workaround: if there's an argument but no valid subcommand, route it properly.
     if len(sys.argv) > 1 and sys.argv[1] not in ["explain", "gen", "check", "config", "history", "save", "--help", "-h"]:
-        # The user provided free-form text without a subcommand.
         text = " ".join(sys.argv[1:])
+        text_lower = text.strip().lower()
         
         import os
-        is_ai_man = (os.path.basename(sys.argv[0]) == "ai" and text.strip().lower() == "man")
+        import shutil
+        import difflib
+        from aiman.core.explainer import COMMAND_CACHE
         
-        # Easter egg
-        if is_ai_man or text.strip().lower() in ["ai man", "iron man"]:
-            console.print("[bold yellow]🤖 Did you mean 'aiman'? I am not Iron Man, I am aiman! But here is what I can do...[/bold yellow]\n")
-            text = "aiman"
+        is_ai_man = (os.path.basename(sys.argv[0]) == "ai" and text_lower == "man")
+        is_real_cmd = False
+        if text_lower:
+            first_word = text_lower.split()[0]
+            is_real_cmd = (shutil.which(first_word) is not None) or (first_word in COMMAND_CACHE)
+            
+        # Easter egg for typos
+        if is_ai_man or text_lower == "iron man" or (not is_real_cmd and text_lower != "aiman" and text_lower != ""):
+            sim1 = difflib.SequenceMatcher(None, text_lower, "aiman").ratio()
+            sim2 = difflib.SequenceMatcher(None, text_lower, "ai man").ratio()
+            
+            if is_ai_man or text_lower == "iron man" or max(sim1, sim2) >= 0.75:
+                console.print("[bold yellow]🤖 Did you mean 'aiman'? I am not Iron Man, I am aiman![/bold yellow]")
+                sys.exit(0)
             
         mode = detect_mode(text)
         console.print(f"[dim]auto-detected mode: {mode} (use 'aiman explain/gen/check' to override)[/dim]")
