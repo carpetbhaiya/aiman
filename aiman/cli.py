@@ -75,20 +75,28 @@ def config_get(key: str = typer.Argument(None, help="Config key to view (model, 
 
 
 @app.command()
-def explain(command: str = typer.Argument(..., help="Command or utility name, e.g. 'tar'")):
+def explain(
+    command: list[str] = typer.Argument(..., help="Command or utility name, e.g. 'tar'"),
+    explicit: bool = typer.Option(True, "--explicit/--no-explicit", hidden=True)
+):
     """Show syntax and examples for a known command."""
-    if command.strip().lower() == "aiman":
+    command_str = " ".join(command)
+    if command_str.strip().lower() == "aiman":
         _print_self_capabilities()
         raise typer.Exit()
         
     llm = get_default_client()
     
-    console.print(f"[bold cyan]Asking AI to explain '{command}'...[/bold cyan]")
+    console.print(f"[bold cyan]Asking AI to explain '{command_str}'...[/bold cyan]")
     text = ""
-    with Live(Panel(Markdown(text), title=f"📘 aiman explain: {command}", border_style="cyan"), refresh_per_second=10) as live:
-        for chunk in explain_command_stream(command, llm):
+    with Live(Panel(Markdown(text), title=f"📘 aiman explain: {command_str}", border_style="cyan"), refresh_per_second=10) as live:
+        for chunk in explain_command_stream(command_str, llm):
             text += chunk
-            live.update(Panel(Markdown(text), title=f"📘 aiman explain: {command}", border_style="cyan"))
+            live.update(Panel(Markdown(text), title=f"📘 aiman explain: {command_str}", border_style="cyan"))
+
+    safety = assess_command(command_str, llm)
+    if explicit or safety.verdict in ["caution", "dangerous"]:
+        _print_safety(safety)
 
 def _print_self_capabilities():
     import pyfiglet
@@ -121,12 +129,12 @@ def _print_self_capabilities():
 
 
 @app.command()
-def gen(description: str = typer.Argument(..., help="What you want to do, in plain English")):
+def gen(description: list[str] = typer.Argument(..., help="What you want to do, in plain English")):
     """Generate a shell command from a plain-English description."""
     llm = get_default_client()
     
-    current_desc = description
-    original_desc = description
+    current_desc = " ".join(description)
+    original_desc = current_desc
     
     while True:
         with console.status("[bold green]Generating command...[/bold green]", spinner=random.choice(RANDOM_SPINNERS)):
@@ -179,11 +187,12 @@ def gen(description: str = typer.Argument(..., help="What you want to do, in pla
 
 
 @app.command()
-def check(command: str = typer.Argument(..., help="A shell command to safety-check")):
+def check(command: list[str] = typer.Argument(..., help="A shell command to safety-check")):
     """Check whether a pasted command is dangerous before you run it."""
     llm = get_default_client()
+    command_str = " ".join(command)
     with console.status(f"[bold yellow]Analyzing command safety...[/bold yellow]", spinner=random.choice(RANDOM_SPINNERS)):
-        result = assess_command(command, llm)
+        result = assess_command(command_str, llm)
     _print_safety(result)
 
 @app.command()
@@ -293,7 +302,7 @@ def run_app():
         mode = detect_mode(text)
         console.print(f"[dim]auto-detected mode: {mode} (use 'aiman explain/gen/check' to override)[/dim]")
         if mode == "explain":
-            sys.argv = [sys.argv[0], "explain", text]
+            sys.argv = [sys.argv[0], "explain", "--no-explicit", text]
         elif mode == "generate":
             sys.argv = [sys.argv[0], "gen", text]
         else:
